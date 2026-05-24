@@ -193,5 +193,5 @@ export const settingPreset = {
   groqCustomModels: customModelsetting('groqCustomModels', 'groqCustomModel'),
   systemPrompt: inputSetting('', 'defaultSystemPrompt'),
   userPrompt: inputSetting('', 'defaultPrompt'),
-  agentMaxIterations: inputNumSetting(150, 'agentMaxIterations', 'maxTokens'),
+  agentMaxIterations: inputNumSetting(300, 'agentMaxIterations', 'maxTokens'),
 } as const satisfies Record<SettingNames, ISettingOption<any>>

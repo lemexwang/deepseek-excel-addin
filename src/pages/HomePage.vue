@@ -712,10 +712,10 @@ Valid chartTypes: ColumnClustered, Line, Pie, Bar, Area, XYScatter.
 - If a tool call returns SUCCESS, treat that step as done. Do NOT write the same range again.
 - NEVER overwrite data the user already has unless explicitly asked.
 
-# Stop Looping (CRITICAL)
-- If a tool fails, try ONCE with corrected parameters, then report the error. Do NOT loop.
-- Hard cap: 10 tool calls per user request. Plan before acting.
-- Do NOT call \`getSheetData\` repeatedly to verify writes — trust successful tool results.
+# Efficiency (CRITICAL)
+- Plan ALL steps before acting. For multi-sheet tasks, write all data for one sheet (setRangeValues → createTable → formatTable → autoFit) before moving to the next sheet.
+- Do NOT call \`getSheetData\` or \`getSelectedRange\` to verify writes — trust successful tool results.
+- If a tool fails, try ONCE with corrected parameters, then report the error. Do NOT retry in a loop.
 
 # Safety
 - Do NOT call \`clearRange(all)\` or \`deleteSheet\` unless the user explicitly instructs it.
