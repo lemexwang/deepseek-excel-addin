@@ -455,15 +455,15 @@ import { availableAPIs, buildInPrompt } from '@/utils/constant'
 import { getGeneralToolDefinitions } from '@/utils/generalTools'
 import useSettingForm from '@/utils/settingForm'
 import { Setting_Names, SettingNames, settingPreset } from '@/utils/settingPreset'
-import { getWordToolDefinitions } from '@/utils/wordTools'
+import { getExcelToolDefinitions } from '@/utils/excelTools'
 const { t } = useI18n()
 const router = useRouter()
 const settingForm = useSettingForm()
 
 const currentTab = ref('provider')
 
-// Word tools list
-const wordToolsList = [...getGeneralToolDefinitions(), ...getWordToolDefinitions()]
+// Excel tools list
+const wordToolsList = [...getGeneralToolDefinitions(), ...getExcelToolDefinitions()]
 
 const newCustomModel = ref<Record<string, string>>({})
 const customModelsMap = ref<Record<string, string[]>>({})
@@ -513,7 +513,7 @@ const editingBuiltinPrompt = ref<{
 const originalBuiltInPrompts = { ...buildInPrompt }
 
 // Tool enable/disable state
-const enabledWordTools = ref<Set<string>>(new Set())
+const enabledExcelTools = ref<Set<string>>(new Set())
 const enabledGeneralTools = ref<Set<string>>(new Set())
 
 const tabs = [
@@ -791,17 +791,17 @@ const getUserPromptPreview = (userFunc: (text: string, language: string) => stri
 }
 
 const loadToolPreferences = () => {
-  const wordTools = localStorage.getItem('enabledWordTools')
+  const wordTools = localStorage.getItem('enabledExcelTools')
   const generalTools = localStorage.getItem('enabledGeneralTools')
 
   if (wordTools) {
     try {
-      enabledWordTools.value = new Set(JSON.parse(wordTools))
+      enabledExcelTools.value = new Set(JSON.parse(wordTools))
     } catch {
-      enabledWordTools.value = new Set(getWordToolDefinitions().map(t => t.name))
+      enabledExcelTools.value = new Set(getExcelToolDefinitions().map(t => t.name))
     }
   } else {
-    enabledWordTools.value = new Set(getWordToolDefinitions().map(t => t.name))
+    enabledExcelTools.value = new Set(getExcelToolDefinitions().map(t => t.name))
   }
 
   if (generalTools) {
@@ -818,16 +818,16 @@ const loadToolPreferences = () => {
 }
 
 const saveToolPreferences = () => {
-  localStorage.setItem('enabledWordTools', JSON.stringify([...enabledWordTools.value]))
+  localStorage.setItem('enabledExcelTools', JSON.stringify([...enabledExcelTools.value]))
   localStorage.setItem('enabledGeneralTools', JSON.stringify([...enabledGeneralTools.value]))
 }
 
 const toggleTool = (toolName: string, isWordTool: boolean) => {
   if (isWordTool) {
-    if (enabledWordTools.value.has(toolName)) {
-      enabledWordTools.value.delete(toolName)
+    if (enabledExcelTools.value.has(toolName)) {
+      enabledExcelTools.value.delete(toolName)
     } else {
-      enabledWordTools.value.add(toolName)
+      enabledExcelTools.value.add(toolName)
     }
   } else {
     if (enabledGeneralTools.value.has(toolName)) {
@@ -840,7 +840,7 @@ const toggleTool = (toolName: string, isWordTool: boolean) => {
 }
 
 const isToolEnabled = (toolName: string, isWordTool: boolean): boolean => {
-  return isWordTool ? enabledWordTools.value.has(toolName) : enabledGeneralTools.value.has(toolName)
+  return isWordTool ? enabledExcelTools.value.has(toolName) : enabledGeneralTools.value.has(toolName)
 }
 
 const isGeneralTool = (toolName: string): boolean => {

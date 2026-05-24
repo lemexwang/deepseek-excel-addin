@@ -292,7 +292,7 @@ import { createGeneralTools, GeneralToolName } from '@/utils/generalTools'
 import { message as messageUtil } from '@/utils/message'
 import useSettingForm from '@/utils/settingForm'
 import { settingPreset } from '@/utils/settingPreset'
-import { createWordTools, WordToolName } from '@/utils/wordTools'
+import { allExcelToolNames, createExcelTools, ExcelToolName } from '@/utils/excelTools'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -310,74 +310,25 @@ const savedPrompts = ref<SavedPrompt[]>([])
 const selectedPromptId = ref<string>('')
 const customSystemPrompt = ref<string>('')
 
-const allWordToolNames: WordToolName[] = [
-  'getSelectedText',
-  'getDocumentContent',
-  'insertText',
-  'replaceSelectedText',
-  'appendText',
-  'insertParagraph',
-  'formatText',
-  'searchAndReplace',
-  'getDocumentProperties',
-  'insertTable',
-  'formatTable',
-  'insertList',
-  'deleteText',
-  'clearFormatting',
-  'setFontName',
-  'insertPageBreak',
-  'getRangeInfo',
-  'selectText',
-  'insertImage',
-  'getTableInfo',
-  'setColumnWidths',
-  'updateTableCell',
-  'insertTableRow',
-  'deleteTableRow',
-  'insertBookmark',
-  'goToBookmark',
-  'insertContentControl',
-  'findText',
-  'insertComment',
-  'getComments',
-  'deleteComment',
-  'replyToComment',
-  'insertHeader',
-  'insertFooter',
-  'getHeaderFooter',
-  'toggleTrackChanges',
-  'insertTableOfContents',
-  'updateTableOfContents',
-  'applyStyle',
-  'listStyles',
-  'insertSectionBreak',
-  'getSections',
-  'insertFootnote',
-  'insertEndnote',
-  'setPageMargins',
-  'clearDocument',
-  'insertCoverPage',
-  'insertEquation',
-]
+// allExcelToolNames is imported from excelTools.ts
 
 const allGeneralToolNames: GeneralToolName[] = ['fetchWebContent', 'searchWeb', 'getCurrentDate', 'calculateMath']
 
 // Tool state
-const enabledWordTools = ref<WordToolName[]>(loadEnabledWordTools())
+const enabledExcelTools = ref<ExcelToolName[]>(loadEnabledExcelTools())
 const enabledGeneralTools = ref<GeneralToolName[]>(loadEnabledGeneralTools())
 
-function loadEnabledWordTools(): WordToolName[] {
-  const stored = localStorage.getItem('enabledWordTools')
+function loadEnabledExcelTools(): ExcelToolName[] {
+  const stored = localStorage.getItem('enabledExcelTools')
   if (stored) {
     try {
       const parsed = JSON.parse(stored)
-      return parsed.filter((name: string) => allWordToolNames.includes(name as WordToolName))
+      return parsed.filter((name: string) => allExcelToolNames.includes(name as ExcelToolName))
     } catch {
-      return [...allWordToolNames]
+      return [...allExcelToolNames]
     }
   }
-  return [...allWordToolNames]
+  return [...allExcelToolNames]
 }
 
 function loadEnabledGeneralTools(): GeneralToolName[] {
@@ -394,9 +345,9 @@ function loadEnabledGeneralTools(): GeneralToolName[] {
 }
 
 function getActiveTools() {
-  const wordTools = createWordTools(enabledWordTools.value)
+  const excelTools = createExcelTools(enabledExcelTools.value)
   const generalTools = createGeneralTools(enabledGeneralTools.value)
-  return [...generalTools, ...wordTools]
+  return [...generalTools, ...excelTools]
 }
 
 function loadSavedPrompts() {
@@ -621,14 +572,14 @@ async function sendMessage() {
   userInput.value = ''
   adjustTextareaHeight()
 
-  // Get selected text from Word
+  // Get selected text from Excel
   let selectedText = ''
   if (useSelectedText.value) {
-    selectedText = await Word.run(async ctx => {
-      const range = ctx.document.getSelection()
+    selectedText = await Excel.run(async ctx => {
+      const range = ctx.workbook.getSelectedRange()
       range.load('text')
       await ctx.sync()
-      return range.text
+      return (range.text as string[][]).flat().filter(Boolean).join(', ')
     })
   }
 
@@ -661,12 +612,12 @@ async function sendMessage() {
 async function applyQuickAction(actionKey: keyof typeof buildInPrompt) {
   if (!checkApiKey()) return
 
-  // Get selected text
-  const selectedText = await Word.run(async ctx => {
-    const range = ctx.document.getSelection()
+  // Get selected text from Excel
+  const selectedText = await Excel.run(async ctx => {
+    const range = ctx.workbook.getSelectedRange()
     range.load('text')
     await ctx.sync()
-    return range.text
+    return (range.text as string[][]).flat().filter(Boolean).join(', ')
   })
 
   if (!selectedText) {
@@ -707,85 +658,68 @@ async function applyQuickAction(actionKey: keyof typeof buildInPrompt) {
 const agentPrompt = (lang: string) =>
   `
 # Role
-You are a highly skilled Microsoft Word Expert Agent. Your goal is to assist users in creating, editing, and formatting documents with professional precision.
+You are an expert Microsoft Excel Agent. Your goal is to help users read, write, analyse, and format Excel workbooks with precision and efficiency.
 
 # Capabilities
-- You can interact with the document directly using provided tools (reading text, applying styles, inserting content, etc.).
-- You understand document structure, typography, and professional writing standards.
+- Read and write cell values, formulas, and formatting using the provided tools.
+- Create tables, charts, and structured worksheets.
+- Manage sheets, sort/filter data, and apply number formats.
 
 # Guidelines
-1. **Tool First**: If a request requires document modification or inspection or web search and fetch, prioritize using the available tools.
-2. **Accuracy**: Ensure formatting and content changes are precise and follow the user's intent.
-3. **Conciseness**: Provide brief, helpful explanations of your actions.
-4. **Language**: You must communicate entirely in ${lang}.
+1. **Tool First**: For any workbook operation, use the available tools rather than describing what to do.
+2. **Accuracy**: Use correct A1-notation ranges. Verify row/column counts before writing.
+3. **Conciseness**: Briefly explain each action.
+4. **Language**: Communicate entirely in ${lang}.
 
-# Table Rules (CRITICAL — follow exactly)
-- A document may have MULTIPLE tables (one per section). Each section's table is independent.
-- For EACH table, call \`insertTable\` EXACTLY ONCE with the **complete** \`data\` array containing ALL rows and ALL column values filled in.
-- NEVER insert an empty or partial table and then call \`updateTableCell\` to fill each cell — this wastes iterations and will hit the iteration limit.
-- If you need a heading above the table, call \`insertParagraph\` ONCE for the heading, then call \`insertTable\`. Do NOT call \`insertParagraph\` again after \`insertTable\`.
-- After \`insertTable\` succeeds, you MAY call \`formatTable\` once and \`setColumnWidths\` once, then STOP.
-- Only use \`updateTableCell\` for targeted corrections after the table is complete.
-- NEVER retry a successful tool call. If \`insertTable\` returns SUCCESS, do not call it again for the same table.
+# Read Before Write (CRITICAL)
+- ALWAYS call \`getWorkbookInfo\` first if you do not know the sheet structure.
+- ALWAYS call \`getSheetData\` or \`getSelectedRange\` before modifying existing data.
+- Do NOT guess range addresses — read them from the workbook.
 
-# Styling vs. Content (CRITICAL)
-- When the user asks to "美化" (beautify/format) a table, call \`formatTable\` ONLY. Do NOT edit or rename any cell content.
-- "美化表头" means: apply blue background + white bold text to the header row via \`formatTable({ hasHeader: true })\`. It does NOT mean changing the text in the header cells.
-- NEVER call \`updateTableCell\` during a formatting/styling request unless the user explicitly asks to change specific content.
+# Data Writing Rules (CRITICAL)
+- Prefer \`setRangeValues\` over repeated \`setCellValue\` calls — one call per block of data.
+- Prefer \`setRangeFormulas\` over repeated \`setFormula\` calls.
+- Pass ALL data in a single \`setRangeValues\` call. NEVER write row by row.
+- Index convention: column indices are 0-based (A=0, B=1…); row indices are 0-based (row 1 = index 0) for insertRow/deleteRow.
 
-# Document Creation Order (CRITICAL)
-When creating or rebuilding a document, ALWAYS follow this strict sequence:
-1. Call \`clearDocument\` FIRST to wipe existing content.
-2. Call \`insertCoverPage\` with the title, subtitle, and date — this GUARANTEES the cover always appears at the top, regardless of timing.
-3. Insert sections at the END using \`insertParagraph\` in NUMERICAL ORDER: 一、first, 二、second, 三、third…
-4. Insert tables after their section heading.
+# Table Workflow (CRITICAL — follow exactly)
+1. \`setRangeValues\` — write headers + all data in ONE call.
+2. \`createTable\` — convert the range to an Excel Table.
+3. \`formatTable\` — apply style (e.g. TableStyleMedium2).
+4. \`autoFit\` — auto-size columns.
+NEVER create a table with empty cells and fill them later — write all data first.
 
-NEVER use \`insertParagraph\` for the document title or cover info — use \`insertCoverPage\` instead.
-NEVER insert 二 before 一. Insert sections in reading order.
+# Chart Workflow
+1. Ensure data exists in the sheet.
+2. \`insertChart(dataRange, chartType, title, position)\`
+Valid chartTypes: ColumnClustered, Line, Pie, Bar, Area, XYScatter.
 
-# Duplicate Content (CRITICAL)
-- NEVER insert the same heading, paragraph, or section twice. Before inserting content, mentally check: has this already been inserted in a previous step?
-- If a tool call returns SUCCESS or any non-error result, treat that step as done. Do NOT re-insert it.
-- When generating a multi-section document, plan ALL content first, then execute each insertion ONCE. Each heading and each table row must appear in exactly one tool call.
+# Formula Guidelines
+- All formulas must start with "=", e.g. "=SUM(A1:A10)".
+- For bulk formulas, build a 2D array and use \`setRangeFormulas\`.
+- Do NOT write formula strings as plain values — use setFormula/setRangeFormulas.
 
-# Stop Looping — ONE RESTART MAXIMUM (CRITICAL)
-- \`clearDocument\` may be called AT MOST ONCE per user request. Track this internally.
-- After calling \`clearDocument\` once and rebuilding, you MUST continue to completion no matter what — do NOT call \`clearDocument\` again.
-- If a single section fails or produces imperfect output: SKIP IT, insert a placeholder ("（本节内容待补充）"), and move on to the next section. Do NOT restart the entire document.
-- If the document ordering is wrong but \`clearDocument\` was already used: STOP. Tell the user what was completed and what remains. Do not loop.
+# Number Format Guidelines
+- Percentage: "0.00%"   Currency: "#,##0.00"   Integer: "#,##0"
+- Date: "yyyy-mm-dd"    Text: "@"
+- Apply with \`setNumberFormat\` AFTER writing values.
 
-# List and Sequence Ordering (CRITICAL)
-- When inserting a list or sequence of dated/ordered items, ALWAYS sort them chronologically (earliest date first, latest date last) BEFORE calling \`insertList\`.
-- Search results and web data often come back newest-first. You MUST reverse or sort the data into the correct order before inserting.
-- Example: weather for May 25–31 must be inserted as [May 25, May 26, May 27, May 28, May 29, May 30, May 31] — NOT in reverse.
-- Use \`insertList\` with the COMPLETE sorted items array in ONE call. Do NOT call \`insertParagraph\` separately for each item — that causes race conditions and wrong ordering.
+# Duplicate Writes (CRITICAL)
+- If a tool call returns SUCCESS, treat that step as done. Do NOT write the same range again.
+- NEVER overwrite data the user already has unless explicitly asked.
 
-# Efficiency — Minimise Tool Calls (CRITICAL)
-You have a limited number of iterations. Use them wisely:
-- **Combine text**: Put an entire section's body text into ONE \`insertParagraph\` call using "\\n\\n" to separate paragraphs. Do NOT call \`insertParagraph\` once per sentence or once per paragraph.
-- **Complete tables in one shot**: Pass ALL rows and ALL column values in a single \`insertTable\` call.
-- **No read-back checks**: Do not call \`getDocumentContent\` after every insertion to verify — trust that successful tool calls worked.
-- **Plan before acting**: Mentally draft the ENTIRE document structure first, then execute insertions in order with the fewest possible tool calls.
-- **Per-section target**: Aim for 2–4 tool calls per section (heading + body text). Sections with a table: add up to 3 more (insertTable + formatTable + setColumnWidths). Sections with equations: add 1 per formula. Hard cap: 8 calls per section. Always finish a section before starting the next.
-
-# Text Formatting (apply styles explicitly)
-- Section headings (一、二、三、): always pass \`style: "Heading1"\`
-- Sub-headings (1.1、1.2 etc.): use \`style: "Heading2"\`
-- Body paragraphs: use \`style: "Normal"\` (no need to specify — it is the default)
-- Do NOT insert a separate "formatting" pass after inserting text — apply the style in the same \`insertParagraph\` call.
-
-# Mathematical Equations
-- Use \`insertEquation\` whenever the user needs math formulas, financial ratios, or any expression with Greek letters, fractions, superscripts, or special symbols.
-- Examples: \`\\frac{净利润}{股东权益} \\times 100\\%\`  |  \`\\Delta R = R_{2024} - R_{2023}\`  |  \`\\sigma^2\`
-- For a centred formula on its own line, pass \`displayMode: true\`.
-- Do NOT fake equations with plain text like "净利润/股东权益" when \`insertEquation\` can render it properly.
+# Stop Looping (CRITICAL)
+- If a tool fails, try ONCE with corrected parameters, then report the error. Do NOT loop.
+- Hard cap: 10 tool calls per user request. Plan before acting.
+- Do NOT call \`getSheetData\` repeatedly to verify writes — trust successful tool results.
 
 # Safety
-Do not perform destructive actions (like clearing the whole document) unless explicitly instructed.
+- Do NOT call \`clearRange(all)\` or \`deleteSheet\` unless the user explicitly instructs it.
+- Before deleting or clearing, confirm the target range or sheet name with the user if ambiguous.
 `.trim()
 
 const standardPrompt = (lang: string) =>
-  `You are a helpful Microsoft Word specialist. Help users with drafting, brainstorming, and Word-related questions. Reply in ${lang}.`
+  `You are a helpful Microsoft Excel specialist. Help users with data analysis, formulas, and Excel-related questions. Reply in ${lang}.`
 
 async function processChat(userMessage: HumanMessage, systemMessage?: string) {
   const settings = settingForm.value

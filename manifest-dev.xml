@@ -6,12 +6,12 @@
           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
           xsi:type="TaskPaneApp">
 
-  <Id>a1b2c3d4-e5f6-7890-abcd-ef1234567890</Id>
+  <Id>b2c3d4e5-f6a7-8901-bcde-f12345678901</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>DeepSeek</ProviderName>
   <DefaultLocale>zh-CN</DefaultLocale>
-  <DisplayName DefaultValue="DeepSeek for Word" />
-  <Description DefaultValue="DeepSeek AI 写作助手 — 智能写作、表格处理、翻译润色"/>
+  <DisplayName DefaultValue="DeepSeek for Excel" />
+  <Description DefaultValue="DeepSeek AI 数据助手 — 智能数据分析、表格操作、图表生成"/>
 
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
@@ -21,7 +21,7 @@
   </AppDomains>
 
   <Hosts>
-    <Host Name="Document" />
+    <Host Name="Workbook" />
   </Hosts>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://localhost:3000/index.html" />
@@ -32,7 +32,7 @@
 
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
-      <Host xsi:type="Document">
+      <Host xsi:type="Workbook">
         <DesktopFormFactor>
           <GetStarted>
             <Title resid="GetStarted.Title"/>
@@ -84,13 +84,13 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/index.html" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="DeepSeek for Word 已就绪" />
+        <bt:String id="GetStarted.Title" DefaultValue="DeepSeek for Excel 已就绪" />
         <bt:String id="CommandsGroup.Label" DefaultValue="DeepSeek" />
         <bt:String id="TaskpaneButton.Label" DefaultValue="DeepSeek AI" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="DeepSeek AI 助手已加载。点击 HOME 标签页中的 DeepSeek AI 按钮开始使用。" />
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="打开 DeepSeek AI 写作助手" />
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="打开 DeepSeek AI 数据助手" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
