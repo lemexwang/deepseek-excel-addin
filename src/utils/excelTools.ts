@@ -734,7 +734,7 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
           used.load('isNullObject')
           await ctx.sync()
           if (used.isNullObject) return 'Sheet is empty, nothing to replace'
-          const count = used.replaceAll(findText, replaceText, { matchCase, matchEntireCellContents: false })
+          const count = used.replaceAll(findText, replaceText, { matchCase, completeMatch: false })
           await ctx.sync()
           return `Replaced "${findText}" with "${replaceText}" (${count.value} occurrence(s))`
         })
