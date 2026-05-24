@@ -44,12 +44,15 @@ export const languageMap: IStringKeyMap = {
 }
 
 export const availableAPIs: IStringKeyMap = {
+  deepseek: 'deepseek',
   official: 'official',
   azure: 'azure',
   gemini: 'gemini',
   ollama: 'ollama',
   groq: 'groq',
 }
+
+export const availableModelsForDeepseek: string[] = ['deepseek-chat', 'deepseek-reasoner']
 
 // official API 可用的模型
 export const availableModels: string[] = [
@@ -81,6 +84,8 @@ export const availableModelsForGemini: string[] = [
 
 // Ollama API 可用的模型
 export const availableModelsForOllama: string[] = [
+  'gemma4:latest',
+  'gemma2:latest',
   'qwen3:latest',
   'llama4:latest',
   'deepseek-r1:latest',
@@ -215,3 +220,4 @@ export const getBuiltInPrompt = () => {
     return buildInPrompt
   }
 }
+

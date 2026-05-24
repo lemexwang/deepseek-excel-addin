@@ -49,9 +49,23 @@ export interface AzureOptions extends BaseChatCompletionOptions {
   azureAPIVersion?: string
 }
 
-export type ProviderOptions = OpenAIOptions | OllamaOptions | GroqOptions | GeminiOptions | AzureOptions
+export interface DeepseekOptions extends BaseChatCompletionOptions {
+  provider: 'deepseek'
+  model?: string
+  config: {
+    apiKey: string
+  }
+}
 
-type supportedProviders = 'official' | 'ollama' | 'groq' | 'gemini' | 'azure'
+export type ProviderOptions =
+  | OpenAIOptions
+  | OllamaOptions
+  | GroqOptions
+  | GeminiOptions
+  | AzureOptions
+  | DeepseekOptions
+
+type supportedProviders = 'deepseek' | 'official' | 'ollama' | 'groq' | 'gemini' | 'azure'
 // Agent options with tools support
 export interface AgentOptions extends BaseChatCompletionOptions {
   provider: supportedProviders

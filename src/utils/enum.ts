@@ -44,6 +44,13 @@ export const localStorageKey = {
   groqModel: 'groqModel',
   groqCustomModel: 'groqCustomModel',
   groqCustomModels: 'groqCustomModels',
+  // deepseek api
+  deepseekAPIKey: 'deepseekAPIKey',
+  deepseekModel: 'deepseekModel',
+  deepseekCustomModel: 'deepseekCustomModel',
+  deepseekCustomModels: 'deepseekCustomModels',
+  deepseekTemperature: 'deepseekTemperature',
+  deepseekMaxTokens: 'deepseekMaxTokens',
   // proxy
   enableProxy: 'enableProxy',
   proxy: 'proxy',

@@ -8,9 +8,22 @@ import { createAgent } from 'langchain'
 
 import { IndexedDBSaver } from '@/api/checkpoints'
 
+export const providerCapabilities: Record<
+  string,
+  { supportsFunctionCalling: boolean; supportsVision: boolean; supportsWebSearch: boolean }
+> = {
+  deepseek: { supportsFunctionCalling: true, supportsVision: false, supportsWebSearch: false },
+  official: { supportsFunctionCalling: true, supportsVision: true, supportsWebSearch: false },
+  gemini: { supportsFunctionCalling: true, supportsVision: true, supportsWebSearch: true },
+  groq: { supportsFunctionCalling: true, supportsVision: false, supportsWebSearch: false },
+  ollama: { supportsFunctionCalling: true, supportsVision: false, supportsWebSearch: false },
+  azure: { supportsFunctionCalling: true, supportsVision: true, supportsWebSearch: false },
+}
+
 import {
   AgentOptions,
   AzureOptions,
+  DeepseekOptions,
   GeminiOptions,
   GroqOptions,
   OllamaOptions,
@@ -19,6 +32,19 @@ import {
 } from './types'
 
 const ModelCreators: Record<string, (opts: any) => BaseChatModel> = {
+  deepseek: (opts: DeepseekOptions) => {
+    const modelName = opts.model || 'deepseek-chat'
+    return new ChatOpenAI({
+      modelName,
+      configuration: {
+        apiKey: opts.config.apiKey,
+        baseURL: 'https://api.deepseek.com/v1',
+      },
+      temperature: opts.temperature ?? 0.7,
+      maxTokens: opts.maxTokens ?? 4096,
+    })
+  },
+
   official: (opts: OpenAIOptions) => {
     const modelName = opts.model || 'gpt-5'
     return new ChatOpenAI({

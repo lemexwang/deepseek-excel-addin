@@ -9,6 +9,8 @@ export function checkAuth(auth: Auth): boolean {
   if (!auth) return false
 
   switch (auth.type) {
+    case 'deepseek':
+      return !!auth.deepseekAPIKey
     case 'official':
       return !!auth.apiKey
     case 'azure':

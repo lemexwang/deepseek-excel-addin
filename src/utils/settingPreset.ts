@@ -1,7 +1,13 @@
 import { i18n } from '@/i18n'
 
 import { forceNumber, optionLists } from './common'
-import { availableModels, availableModelsForGemini, availableModelsForGroq, availableModelsForOllama } from './constant'
+import {
+  availableModels,
+  availableModelsForDeepseek,
+  availableModelsForGemini,
+  availableModelsForGroq,
+  availableModelsForOllama,
+} from './constant'
 import { localStorageKey } from './enum'
 
 type componentType = 'input' | 'select' | 'inputNum'
@@ -39,6 +45,12 @@ interface ISettingOption<T> {
 
 export const Setting_Names = [
   'api',
+  'deepseekAPIKey',
+  'deepseekModelSelect',
+  'deepseekCustomModel',
+  'deepseekCustomModels',
+  'deepseekTemperature',
+  'deepseekMaxTokens',
   'localLanguage',
   'replyLanguage',
   'officialAPIKey',
@@ -124,8 +136,14 @@ const customModelsetting = (saveKey: keyOfLocalStorageKey, oldKey: keyOfLocalSto
 })
 
 export const settingPreset = {
+  deepseekAPIKey: inputSetting('', 'deepseekAPIKey'),
+  deepseekModelSelect: selectSetting('deepseek-chat', 'deepseekModel', availableModelsForDeepseek),
+  deepseekCustomModel: inputSetting('', 'deepseekCustomModel'),
+  deepseekCustomModels: customModelsetting('deepseekCustomModels', 'deepseekCustomModel'),
+  deepseekTemperature: inputNumSetting(0.7, 'deepseekTemperature', 'temperature'),
+  deepseekMaxTokens: inputNumSetting(4096, 'deepseekMaxTokens', 'maxTokens'),
   api: {
-    ...inputSetting('official'),
+    ...inputSetting('ollama'),
     type: 'select',
     optionObj: optionLists.apiList,
   },
@@ -165,7 +183,7 @@ export const settingPreset = {
   ollamaEndpoint: inputSetting(''),
   ollamaCustomModel: inputSetting(''),
   ollamaCustomModels: customModelsetting('ollamaCustomModels', 'ollamaCustomModel'),
-  ollamaModelSelect: selectSetting('qwen3:latest', 'ollamaModel', availableModelsForOllama),
+  ollamaModelSelect: selectSetting('gemma4:latest', 'ollamaModel', availableModelsForOllama),
   ollamaTemperature: inputNumSetting(0.7, 'ollamaTemperature', 'temperature'),
   groqAPIKey: inputSetting(''),
   groqTemperature: inputNumSetting(0.5, 'groqTemperature', 'temperature'),
@@ -175,5 +193,5 @@ export const settingPreset = {
   groqCustomModels: customModelsetting('groqCustomModels', 'groqCustomModel'),
   systemPrompt: inputSetting('', 'defaultSystemPrompt'),
   userPrompt: inputSetting('', 'defaultPrompt'),
-  agentMaxIterations: inputNumSetting(25, 'agentMaxIterations', 'maxTokens'),
+  agentMaxIterations: inputNumSetting(150, 'agentMaxIterations', 'maxTokens'),
 } as const satisfies Record<SettingNames, ISettingOption<any>>

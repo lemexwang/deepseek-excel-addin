@@ -51,26 +51,44 @@ const fetchWebContentTool = new DynamicStructuredTool({
 const searchWebTool = new DynamicStructuredTool({
   name: 'searchWeb',
   description:
-    'Searches the web for information. Returns top search results with titles and snippets. Useful for finding references, facts, or background information for the document. If you need to look up information you do not know, use this tool.',
+    'Searches the web for information. Returns top search results with titles and snippets. ' +
+    'Use maxResults=3 for quick facts, maxResults=5 (default) for richer coverage. ' +
+    'Avoid requesting more than needed — fewer results means faster response.',
   schema: z.object({
     query: z.string().describe('The search query'),
-    maxResults: z.number().optional().default(10).describe('Maximum number of results to return (default: 10)'),
+    maxResults: z.number().optional().default(5).describe('Number of results to return (default: 5, max: 10). Use 3 for simple factual queries.'),
   }),
-  func: async ({ query, maxResults = 10 }) => {
+  func: async ({ query, maxResults = 5 }) => {
+    const clampedMax = Math.min(Math.max(1, maxResults), 10)
+    const controller = new AbortController()
+    // 8-second timeout — fail fast so the agent can move on rather than hanging
+    const timer = setTimeout(() => controller.abort(), 8000)
     try {
-      const url = `https://ddgs.horosama.com/search/text?query=${encodeURIComponent(query)}&max_results=${maxResults <= 10 ? maxResults : 10}`
-      const response = await fetch(url)
+      const url = `https://ddgs.horosama.com/search/text?query=${encodeURIComponent(query)}&max_results=${clampedMax}`
+      const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) {
-        return `Search failed: ${response.status}`
+        return `Search failed: ${response.status} ${response.statusText}`
       }
       const data = await response.json()
-      let results = ''
-      data.results.forEach((result: any, index: number) => {
-        results += `Result ${index + 1}:\nTitle: ${result.title}\nLink: ${result.href}\nSnippet: ${result.body}\n\n`
-      })
-      return results
+      if (!data.results || data.results.length === 0) {
+        return 'No search results found.'
+      }
+      // Truncate each snippet to 300 chars — keeps token count low so the AI step is faster
+      const SNIPPET_MAX = 300
+      return data.results
+        .slice(0, clampedMax)
+        .map((result: any, index: number) => {
+          const snippet = (result.body || '').slice(0, SNIPPET_MAX)
+          return `[${index + 1}] ${result.title}\n${result.href}\n${snippet}`
+        })
+        .join('\n\n')
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return 'Search timed out after 8 seconds. The search service may be unavailable. Try again or use your existing knowledge.'
+      }
       return `Error searching: ${error.message}`
+    } finally {
+      clearTimeout(timer)
     }
   },
 })

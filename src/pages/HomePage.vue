@@ -17,7 +17,7 @@
       <div class="flex justify-between rounded-sm p-1">
         <div class="flex flex-1 items-center gap-2 text-accent">
           <Sparkles :size="18" />
-          <span class="text-sm font-semibold text-main">Word GPT+</span>
+          <span class="text-sm font-semibold text-main">DeepSeek</span>
         </div>
         <div class="flex items-center gap-1 rounded-md border border-accent/10">
           <CustomButton
@@ -169,11 +169,17 @@
             <button
               class="cursor-po flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
               :class="{ active: mode === 'agent' }"
-              title="Agent Mode"
+              :title="agentModeDisabled ? t('agentModeNotSupported') : 'Agent Mode'"
               @click="mode = 'agent'"
             >
               <BotMessageSquare :size="17" />
             </button>
+            <AlertTriangle
+              v-if="mode === 'agent' && agentModeDisabled"
+              :size="14"
+              class="text-amber-500"
+              :title="t('agentModeNotSupported')"
+            />
           </div>
           <div class="flex min-w-0 flex-1 gap-1 overflow-hidden">
             <select
@@ -194,6 +200,13 @@
               </option>
             </select>
           </div>
+        </div>
+        <div
+          v-if="mode === 'agent' && agentModeDisabled"
+          class="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-1.5 text-xs text-amber-600"
+        >
+          <AlertTriangle :size="14" />
+          <span>{{ $t('agentModeNotSupportedMsg') }}</span>
         </div>
         <div
           class="flex min-w-12 items-center gap-2 rounded-md border border-border bg-surface p-2 focus-within:border-accent"
@@ -244,6 +257,7 @@
 import { AIMessage, HumanMessage, Message, SystemMessage } from '@langchain/core/messages'
 import { useStorage } from '@vueuse/core'
 import {
+  AlertTriangle,
   BookOpen,
   BotMessageSquare,
   CheckCircle,
@@ -267,7 +281,7 @@ import { useRouter } from 'vue-router'
 
 import { type CheckpointTuple, IndexedDBSaver } from '@/api/checkpoints'
 import { insertFormattedResult, insertResult } from '@/api/common'
-import { getAgentResponse, getChatResponse } from '@/api/union'
+import { getAgentResponse, getChatResponse, providerCapabilities } from '@/api/union'
 import CustomButton from '@/components/CustomButton.vue'
 import SingleSelect from '@/components/SingleSelect.vue'
 import CheckPointsPage from '@/pages/checkPointsPage.vue'
@@ -307,6 +321,7 @@ const allWordToolNames: WordToolName[] = [
   'searchAndReplace',
   'getDocumentProperties',
   'insertTable',
+  'formatTable',
   'insertList',
   'deleteText',
   'clearFormatting',
@@ -316,10 +331,34 @@ const allWordToolNames: WordToolName[] = [
   'selectText',
   'insertImage',
   'getTableInfo',
+  'setColumnWidths',
+  'updateTableCell',
+  'insertTableRow',
+  'deleteTableRow',
   'insertBookmark',
   'goToBookmark',
   'insertContentControl',
   'findText',
+  'insertComment',
+  'getComments',
+  'deleteComment',
+  'replyToComment',
+  'insertHeader',
+  'insertFooter',
+  'getHeaderFooter',
+  'toggleTrackChanges',
+  'insertTableOfContents',
+  'updateTableOfContents',
+  'applyStyle',
+  'listStyles',
+  'insertSectionBreak',
+  'getSections',
+  'insertFootnote',
+  'insertEndnote',
+  'setPageMargins',
+  'clearDocument',
+  'insertCoverPage',
+  'insertEquation',
 ]
 
 const allGeneralToolNames: GeneralToolName[] = ['fetchWebContent', 'searchWeb', 'getCurrentDate', 'calculateMath']
@@ -410,6 +449,11 @@ const insertType = ref<insertTypes>('replace')
 
 const errorIssue = ref<boolean | string | null>(false)
 
+const agentModeDisabled = computed(() => {
+  const api = settingForm.value.api as string
+  return !providerCapabilities[api]?.supportsFunctionCalling
+})
+
 const displayHistory = computed(() => {
   return history.value.filter(msg => !(msg instanceof SystemMessage))
 })
@@ -464,6 +508,10 @@ const currentModelOptions = computed(() => {
       presetOptions = settingPreset.groqModelSelect.optionList || []
       customModels = getCustomModels('groqCustomModels', 'groqCustomModel')
       break
+    case 'deepseek':
+      presetOptions = settingPreset.deepseekModelSelect.optionList || []
+      customModels = getCustomModels('deepseekCustomModels', 'deepseekCustomModel')
+      break
     case 'azure':
       return []
     default:
@@ -484,6 +532,8 @@ const currentModelSelect = computed({
         return settingForm.value.ollamaModelSelect
       case 'groq':
         return settingForm.value.groqModelSelect
+      case 'deepseek':
+        return settingForm.value.deepseekModelSelect
       case 'azure':
         return settingForm.value.azureDeploymentName
       default:
@@ -507,6 +557,10 @@ const currentModelSelect = computed({
       case 'groq':
         settingForm.value.groqModelSelect = value
         localStorage.setItem(localStorageKey.groqModel, value)
+        break
+      case 'deepseek':
+        settingForm.value.deepseekModelSelect = value
+        localStorage.setItem(localStorageKey.deepseekModel, value)
         break
       case 'azure':
         settingForm.value.azureDeploymentName = value
@@ -665,6 +719,67 @@ You are a highly skilled Microsoft Word Expert Agent. Your goal is to assist use
 3. **Conciseness**: Provide brief, helpful explanations of your actions.
 4. **Language**: You must communicate entirely in ${lang}.
 
+# Table Rules (CRITICAL — follow exactly)
+- A document may have MULTIPLE tables (one per section). Each section's table is independent.
+- For EACH table, call \`insertTable\` EXACTLY ONCE with the **complete** \`data\` array containing ALL rows and ALL column values filled in.
+- NEVER insert an empty or partial table and then call \`updateTableCell\` to fill each cell — this wastes iterations and will hit the iteration limit.
+- If you need a heading above the table, call \`insertParagraph\` ONCE for the heading, then call \`insertTable\`. Do NOT call \`insertParagraph\` again after \`insertTable\`.
+- After \`insertTable\` succeeds, you MAY call \`formatTable\` once and \`setColumnWidths\` once, then STOP.
+- Only use \`updateTableCell\` for targeted corrections after the table is complete.
+- NEVER retry a successful tool call. If \`insertTable\` returns SUCCESS, do not call it again for the same table.
+
+# Styling vs. Content (CRITICAL)
+- When the user asks to "美化" (beautify/format) a table, call \`formatTable\` ONLY. Do NOT edit or rename any cell content.
+- "美化表头" means: apply blue background + white bold text to the header row via \`formatTable({ hasHeader: true })\`. It does NOT mean changing the text in the header cells.
+- NEVER call \`updateTableCell\` during a formatting/styling request unless the user explicitly asks to change specific content.
+
+# Document Creation Order (CRITICAL)
+When creating or rebuilding a document, ALWAYS follow this strict sequence:
+1. Call \`clearDocument\` FIRST to wipe existing content.
+2. Call \`insertCoverPage\` with the title, subtitle, and date — this GUARANTEES the cover always appears at the top, regardless of timing.
+3. Insert sections at the END using \`insertParagraph\` in NUMERICAL ORDER: 一、first, 二、second, 三、third…
+4. Insert tables after their section heading.
+
+NEVER use \`insertParagraph\` for the document title or cover info — use \`insertCoverPage\` instead.
+NEVER insert 二 before 一. Insert sections in reading order.
+
+# Duplicate Content (CRITICAL)
+- NEVER insert the same heading, paragraph, or section twice. Before inserting content, mentally check: has this already been inserted in a previous step?
+- If a tool call returns SUCCESS or any non-error result, treat that step as done. Do NOT re-insert it.
+- When generating a multi-section document, plan ALL content first, then execute each insertion ONCE. Each heading and each table row must appear in exactly one tool call.
+
+# Stop Looping — ONE RESTART MAXIMUM (CRITICAL)
+- \`clearDocument\` may be called AT MOST ONCE per user request. Track this internally.
+- After calling \`clearDocument\` once and rebuilding, you MUST continue to completion no matter what — do NOT call \`clearDocument\` again.
+- If a single section fails or produces imperfect output: SKIP IT, insert a placeholder ("（本节内容待补充）"), and move on to the next section. Do NOT restart the entire document.
+- If the document ordering is wrong but \`clearDocument\` was already used: STOP. Tell the user what was completed and what remains. Do not loop.
+
+# List and Sequence Ordering (CRITICAL)
+- When inserting a list or sequence of dated/ordered items, ALWAYS sort them chronologically (earliest date first, latest date last) BEFORE calling \`insertList\`.
+- Search results and web data often come back newest-first. You MUST reverse or sort the data into the correct order before inserting.
+- Example: weather for May 25–31 must be inserted as [May 25, May 26, May 27, May 28, May 29, May 30, May 31] — NOT in reverse.
+- Use \`insertList\` with the COMPLETE sorted items array in ONE call. Do NOT call \`insertParagraph\` separately for each item — that causes race conditions and wrong ordering.
+
+# Efficiency — Minimise Tool Calls (CRITICAL)
+You have a limited number of iterations. Use them wisely:
+- **Combine text**: Put an entire section's body text into ONE \`insertParagraph\` call using "\\n\\n" to separate paragraphs. Do NOT call \`insertParagraph\` once per sentence or once per paragraph.
+- **Complete tables in one shot**: Pass ALL rows and ALL column values in a single \`insertTable\` call.
+- **No read-back checks**: Do not call \`getDocumentContent\` after every insertion to verify — trust that successful tool calls worked.
+- **Plan before acting**: Mentally draft the ENTIRE document structure first, then execute insertions in order with the fewest possible tool calls.
+- **Per-section target**: Aim for 2–4 tool calls per section (heading + body text). Sections with a table: add up to 3 more (insertTable + formatTable + setColumnWidths). Sections with equations: add 1 per formula. Hard cap: 8 calls per section. Always finish a section before starting the next.
+
+# Text Formatting (apply styles explicitly)
+- Section headings (一、二、三、): always pass \`style: "Heading1"\`
+- Sub-headings (1.1、1.2 etc.): use \`style: "Heading2"\`
+- Body paragraphs: use \`style: "Normal"\` (no need to specify — it is the default)
+- Do NOT insert a separate "formatting" pass after inserting text — apply the style in the same \`insertParagraph\` call.
+
+# Mathematical Equations
+- Use \`insertEquation\` whenever the user needs math formulas, financial ratios, or any expression with Greek letters, fractions, superscripts, or special symbols.
+- Examples: \`\\frac{净利润}{股东权益} \\times 100\\%\`  |  \`\\Delta R = R_{2024} - R_{2023}\`  |  \`\\sigma^2\`
+- For a centred formula on its own line, pass \`displayMode: true\`.
+- Do NOT fake equations with plain text like "净利润/股东权益" when \`insertEquation\` can render it properly.
+
 # Safety
 Do not perform destructive actions (like clearing the whole document) unless explicitly instructed.
 `.trim()
@@ -690,6 +805,15 @@ async function processChat(userMessage: HumanMessage, systemMessage?: string) {
   const finalMessages = [defaultSystemMessage, ...history.value]
   // Build provider configuration
   const providerConfigs: Record<string, any> = {
+    deepseek: {
+      provider: 'deepseek',
+      config: {
+        apiKey: settings.deepseekAPIKey,
+      },
+      maxTokens: settings.deepseekMaxTokens,
+      temperature: settings.deepseekTemperature,
+      model: settings.deepseekModelSelect,
+    },
     official: {
       provider: 'official',
       config: {
@@ -759,23 +883,16 @@ async function processChat(userMessage: HumanMessage, systemMessage?: string) {
         history.value[lastIndex] = new AIMessage(text)
         scrollToBottom()
       },
-      onToolCall: (toolName: string, _args: any) => {
-        // Show tool call in UI
+      onToolCall: (_toolName: string, _args: any) => {
         const lastIndex = history.value.length - 1
         const currentContent = getMessageText(history.value[lastIndex])
-        history.value[lastIndex] = new AIMessage(currentContent + `\n\n🔧 Calling tool: ${toolName}...`)
-        scrollToBottom()
+        if (!currentContent.includes('\n\n🔧')) {
+          history.value[lastIndex] = new AIMessage(currentContent + '\n\n🔧 处理中...')
+          scrollToBottom()
+        }
       },
-      onToolResult: (toolName: string, _result: string) => {
-        // Update with tool result
-        const lastIndex = history.value.length - 1
-        const currentContent = getMessageText(history.value[lastIndex])
-        const updatedContent = currentContent.replace(
-          `🔧 Calling tool: ${toolName}...`,
-          `✅ Tool ${toolName} completed`,
-        )
-        history.value[lastIndex] = new AIMessage(updatedContent)
-        scrollToBottom()
+      onToolResult: (_toolName: string, _result: string) => {
+        // individual tool results are not shown
       },
     })
   } else {
@@ -825,6 +942,7 @@ function copyToClipboard(text: string) {
 function checkApiKey() {
   const auth = {
     type: settingForm.value.api as supportedPlatforms,
+    deepseekAPIKey: settingForm.value.deepseekAPIKey,
     apiKey: settingForm.value.officialAPIKey,
     azureAPIKey: settingForm.value.azureAPIKey,
     geminiAPIKey: settingForm.value.geminiAPIKey,
