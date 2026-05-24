@@ -309,6 +309,100 @@ check('localStorageKey enum has required agent key', () =>
     .map(k => `localStorageKey missing "${k}"`)
 )
 
+// ── 7. Bug Fix Verification ────────────────────────────────────────────────
+console.log('\n=== 7. Bug Fix Verification ===\n')
+
+check('autoFilter uses sheet.autoFilter not r.autoFilter', () => {
+  const issues = []
+  if (excelToolsSrc.includes('r.autoFilter.clearCriteria'))
+    issues.push('autoFilter still calls r.autoFilter.clearCriteria (Range has no autoFilter)')
+  if (excelToolsSrc.includes('r.autoFilter.apply'))
+    issues.push('autoFilter still calls r.autoFilter.apply (should be sheet.autoFilter.apply)')
+  if (!excelToolsSrc.includes('sheet.autoFilter.apply'))
+    issues.push('autoFilter does not call sheet.autoFilter.apply')
+  if (!excelToolsSrc.includes('sheet.autoFilter.clearCriteria'))
+    issues.push('autoFilter does not call sheet.autoFilter.clearCriteria')
+  return issues
+})
+
+check('autoFilter uses FilterOn.custom not FilterOn.values', () =>
+  excelToolsSrc.includes('FilterOn.values')
+    ? ['autoFilter still uses FilterOn.values — should use FilterOn.custom for criterion-based filter']
+    : []
+)
+
+check('setNumberFormat uses Array.from not Array.fill for 2D array', () =>
+  excelToolsSrc.includes('Array(r.rowCount).fill(Array(')
+    ? ['setNumberFormat still uses Array.fill shared-reference pattern']
+    : []
+)
+
+check('getSheetData uses getUsedRangeOrNullObject', () => {
+  const block = excelToolsSrc.match(/getSheetData: \{[\s\S]*?getWorkbookInfo: \{/)
+  if (!block) return ['Could not locate getSheetData definition block']
+  return block[0].includes('getUsedRangeOrNullObject')
+    ? []
+    : ['getSheetData still uses getUsedRange() without null guard']
+})
+
+check('getLastCell uses getUsedRangeOrNullObject', () => {
+  const block = excelToolsSrc.match(/getLastCell: \{[\s\S]*?\/\/ ── 写入/)
+  if (!block) return ['Could not locate getLastCell definition block']
+  return block[0].includes('getUsedRangeOrNullObject')
+    ? []
+    : ['getLastCell still uses getUsedRange() without null guard']
+})
+
+check('autoFit uses getUsedRangeOrNullObject', () => {
+  const block = excelToolsSrc.match(/autoFit: \{[\s\S]*?freezePanes: \{/)
+  if (!block) return ['Could not locate autoFit definition block']
+  return block[0].includes('getUsedRangeOrNullObject')
+    ? []
+    : ['autoFit still uses getUsedRange() without null guard']
+})
+
+check('findAndReplace uses getUsedRangeOrNullObject', () => {
+  const block = excelToolsSrc.match(/findAndReplace: \{[\s\S]*?createTable: \{/)
+  if (!block) return ['Could not locate findAndReplace definition block']
+  return block[0].includes('getUsedRangeOrNullObject')
+    ? []
+    : ['findAndReplace still uses getUsedRange() without null guard']
+})
+
+check('createExcelTools returns objects with name field', () => {
+  const block = excelToolsSrc.match(/export function createExcelTools[\s\S]*?\}\)/)
+  if (!block) return ['Could not locate createExcelTools']
+  return block[0].includes('name,')
+    ? []
+    : ['createExcelTools map is missing the name field']
+})
+
+check('insertChart uses sheet.getRange for position (not bare string)', () => {
+  const block = excelToolsSrc.match(/insertChart: \{[\s\S]*?\/\/ ── 其他/)
+  if (!block) return ['Could not locate insertChart definition block']
+  if (block[0].includes('chart.setPosition(position)'))
+    return ['insertChart still passes bare string to chart.setPosition()']
+  if (!block[0].includes('chart.setPosition(sheet.getRange('))
+    return ['insertChart does not call chart.setPosition with sheet.getRange()']
+  return []
+})
+
+check('insertChart sets chart.title.visible before .text', () => {
+  const block = excelToolsSrc.match(/insertChart: \{[\s\S]*?\/\/ ── 其他/)
+  if (!block) return ['Could not locate insertChart definition block']
+  return block[0].includes('chart.title.visible = true')
+    ? []
+    : ['insertChart does not set chart.title.visible = true before assigning title text']
+})
+
+check('formatRange uses defensive hex color helper', () => {
+  const block = excelToolsSrc.match(/formatRange: \{[\s\S]*?setColumnWidth: \{/)
+  if (!block) return ['Could not locate formatRange definition block']
+  return block[0].includes('toHex')
+    ? []
+    : ['formatRange still uses raw template literal for color without # guard']
+})
+
 // ── Summary ────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`)
 console.log(`Results: ${passed} passed, ${failed} failed`)

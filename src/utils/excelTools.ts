@@ -102,9 +102,10 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
       withExcelLock(() =>
         Excel.run(async ctx => {
           const sheet = getSheet(ctx, sheetName)
-          const used = sheet.getUsedRange()
-          used.load(['address', 'values', 'rowCount', 'columnCount'])
+          const used = sheet.getUsedRangeOrNullObject()
+          used.load(['isNullObject', 'address', 'values', 'rowCount', 'columnCount'])
           await ctx.sync()
+          if (used.isNullObject) return JSON.stringify({ address: '', values: [], rows: 0, cols: 0 })
           return JSON.stringify({
             address: used.address,
             values: used.values,
@@ -180,7 +181,11 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
     execute: async ({ sheetName }) =>
       withExcelLock(() =>
         Excel.run(async ctx => {
-          const last = getSheet(ctx, sheetName).getUsedRange().getLastCell()
+          const used = getSheet(ctx, sheetName).getUsedRangeOrNullObject()
+          used.load('isNullObject')
+          await ctx.sync()
+          if (used.isNullObject) return 'Sheet is empty'
+          const last = used.getLastCell()
           last.load('address')
           await ctx.sync()
           return last.address
@@ -302,8 +307,9 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
           if (bold !== undefined) r.format.font.bold = bold
           if (italic !== undefined) r.format.font.italic = italic
           if (fontSize !== undefined) r.format.font.size = fontSize
-          if (fontColor !== undefined) r.format.font.color = `#${fontColor}`
-          if (fillColor !== undefined) r.format.fill.color = `#${fillColor}`
+          const toHex = (c: string) => c.startsWith('#') ? c : `#${c}`
+          if (fontColor !== undefined) r.format.font.color = toHex(fontColor)
+          if (fillColor !== undefined) r.format.fill.color = toHex(fillColor)
           if (horizontalAlignment !== undefined) r.format.horizontalAlignment = horizontalAlignment as Excel.HorizontalAlignment
           if (wrapText !== undefined) r.format.wrapText = wrapText
           await ctx.sync()
@@ -414,7 +420,7 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
           const r = getSheet(ctx, sheetName).getRange(range)
           r.load('rowCount,columnCount')
           await ctx.sync()
-          r.numberFormat = Array(r.rowCount).fill(Array(r.columnCount).fill(format))
+          r.numberFormat = Array.from({ length: r.rowCount }, () => Array(r.columnCount).fill(format))
           await ctx.sync()
           return `Set number format in ${range} to "${format}"`
         })
@@ -690,13 +696,16 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
     execute: async ({ range, columnIndex = 0, criteria, clear = false, sheetName }) =>
       withExcelLock(() =>
         Excel.run(async ctx => {
-          const r = getSheet(ctx, sheetName).getRange(range)
+          const sheet = getSheet(ctx, sheetName)
+          const r = sheet.getRange(range)
           if (clear) {
-            r.autoFilter.clearCriteria()
+            sheet.autoFilter.load('enabled')
+            await ctx.sync()
+            if (sheet.autoFilter.enabled) sheet.autoFilter.clearCriteria()
           } else if (criteria) {
-            r.autoFilter.apply(r, columnIndex, { criterion1: criteria, filterOn: Excel.FilterOn.values })
+            sheet.autoFilter.apply(r, columnIndex, { criterion1: criteria, filterOn: Excel.FilterOn.custom })
           } else {
-            r.autoFilter.apply(r, columnIndex)
+            sheet.autoFilter.apply(r, columnIndex)
           }
           await ctx.sync()
           return clear
@@ -721,9 +730,11 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
     execute: async ({ findText, replaceText, matchCase = false, sheetName }) =>
       withExcelLock(() =>
         Excel.run(async ctx => {
-          const count = getSheet(ctx, sheetName)
-            .getUsedRange()
-            .replaceAll(findText, replaceText, { matchCase, matchEntireCellContents: false })
+          const used = getSheet(ctx, sheetName).getUsedRangeOrNullObject()
+          used.load('isNullObject')
+          await ctx.sync()
+          if (used.isNullObject) return 'Sheet is empty, nothing to replace'
+          const count = used.replaceAll(findText, replaceText, { matchCase, matchEntireCellContents: false })
           await ctx.sync()
           return `Replaced "${findText}" with "${replaceText}" (${count.value} occurrence(s))`
         })
@@ -815,8 +826,11 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
             sheet.getRange(dataRange),
             Excel.ChartSeriesBy.auto
           )
-          if (title) chart.title.text = title
-          chart.setPosition(position)
+          if (title) {
+            chart.title.visible = true
+            chart.title.text = title
+          }
+          chart.setPosition(sheet.getRange(position))
           await ctx.sync()
           return `Inserted ${chartType} chart from ${dataRange}`
         })
@@ -840,7 +854,16 @@ const excelToolDefinitions: Record<ExcelToolName, ExcelToolDefinition> = {
       withExcelLock(() =>
         Excel.run(async ctx => {
           const sheet = getSheet(ctx, sheetName)
-          const r = range ? sheet.getRange(range) : sheet.getUsedRange()
+          let r: Excel.Range
+          if (range) {
+            r = sheet.getRange(range)
+          } else {
+            const used = sheet.getUsedRangeOrNullObject()
+            used.load('isNullObject')
+            await ctx.sync()
+            if (used.isNullObject) return 'Sheet is empty, nothing to autofit'
+            r = used
+          }
           if (target === 'columns' || target === 'both') r.format.autofitColumns()
           if (target === 'rows' || target === 'both') r.format.autofitRows()
           await ctx.sync()
@@ -894,7 +917,8 @@ export const allExcelToolNames: ExcelToolName[] = [
 export function createExcelTools(enabledTools?: ExcelToolName[]) {
   return Object.entries(excelToolDefinitions)
     .filter(([name]) => !enabledTools || enabledTools.includes(name as ExcelToolName))
-    .map(([, def]) => ({
+    .map(([name, def]) => ({
+      name,
       description: def.description,
       schema: { type: 'object' as const, properties: def.parameters.properties, required: def.parameters.required ?? [] },
       func: def.execute,
