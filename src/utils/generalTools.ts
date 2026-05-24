@@ -48,48 +48,64 @@ const fetchWebContentTool = new DynamicStructuredTool({
   },
 })
 
+const SNIPPET_MAX = 300
+
+const fetchWithTimeout = (url: string, timeoutMs: number): Promise<Response> => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
+const formatDDGResults = (results: any[], max: number): string =>
+  results
+    .slice(0, max)
+    .map((r: any, i: number) => `[${i + 1}] ${r.title}\n${r.href}\n${(r.body || '').slice(0, SNIPPET_MAX)}`)
+    .join('\n\n')
+
 const searchWebTool = new DynamicStructuredTool({
   name: 'searchWeb',
   description:
     'Searches the web for information. Returns top search results with titles and snippets. ' +
-    'Use maxResults=3 for quick facts, maxResults=5 (default) for richer coverage. ' +
-    'Avoid requesting more than needed — fewer results means faster response.',
+    'Use maxResults=3 for quick facts, maxResults=5 (default) for richer coverage.',
   schema: z.object({
     query: z.string().describe('The search query'),
-    maxResults: z.number().optional().default(5).describe('Number of results to return (default: 5, max: 10). Use 3 for simple factual queries.'),
+    maxResults: z.number().optional().default(5).describe('Number of results (default 5, max 10). Use 3 for simple facts.'),
   }),
   func: async ({ query, maxResults = 5 }) => {
-    const clampedMax = Math.min(Math.max(1, maxResults), 10)
-    const controller = new AbortController()
-    // 8-second timeout — fail fast so the agent can move on rather than hanging
-    const timer = setTimeout(() => controller.abort(), 8000)
+    const n = Math.min(Math.max(1, maxResults), 10)
+    const q = encodeURIComponent(query)
+
+    // Primary: horosama DDG proxy
     try {
-      const url = `https://ddgs.horosama.com/search/text?query=${encodeURIComponent(query)}&max_results=${clampedMax}`
-      const response = await fetch(url, { signal: controller.signal })
-      if (!response.ok) {
-        return `Search failed: ${response.status} ${response.statusText}`
+      const res = await fetchWithTimeout(
+        `https://ddgs.horosama.com/search/text?query=${q}&max_results=${n}`,
+        6000,
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (data.results?.length > 0) return formatDDGResults(data.results, n)
       }
-      const data = await response.json()
-      if (!data.results || data.results.length === 0) {
-        return 'No search results found.'
-      }
-      // Truncate each snippet to 300 chars — keeps token count low so the AI step is faster
-      const SNIPPET_MAX = 300
-      return data.results
-        .slice(0, clampedMax)
-        .map((result: any, index: number) => {
-          const snippet = (result.body || '').slice(0, SNIPPET_MAX)
-          return `[${index + 1}] ${result.title}\n${result.href}\n${snippet}`
+    } catch { /* fall through */ }
+
+    // Fallback: DuckDuckGo instant answer API (no key required)
+    try {
+      const res = await fetchWithTimeout(
+        `https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`,
+        6000,
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const parts: string[] = []
+        if (data.Answer) parts.push(`[Direct Answer] ${data.Answer}`)
+        if (data.AbstractText) parts.push(`[1] ${data.Heading}\n${data.AbstractURL}\n${data.AbstractText.slice(0, SNIPPET_MAX)}`)
+        data.RelatedTopics?.slice(0, n - 1).forEach((t: any, i: number) => {
+          if (t.Text) parts.push(`[${parts.length + 1}] ${t.Text.slice(0, SNIPPET_MAX)}\n${t.FirstURL || ''}`)
         })
-        .join('\n\n')
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        return 'Search timed out after 8 seconds. The search service may be unavailable. Try again or use your existing knowledge.'
+        if (parts.length > 0) return parts.join('\n\n')
       }
-      return `Error searching: ${error.message}`
-    } finally {
-      clearTimeout(timer)
-    }
+    } catch { /* fall through */ }
+
+    return 'Web search unavailable (both endpoints failed). Use your knowledge or ask the user to provide the information directly.'
   },
 })
 

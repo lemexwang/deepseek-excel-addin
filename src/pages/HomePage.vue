@@ -107,10 +107,15 @@
             class="flex min-w-0 flex-1 flex-col gap-1 group-[.assistant]:items-start group-[.assistant]:text-left group-[.user]:items-end group-[.user]:text-left"
           >
             <div
-              class="group max-w-[95%] rounded-md border border-border-secondary p-1 text-sm leading-[1.4] wrap-break-word whitespace-pre-wrap text-main/90 shadow-sm group-[.assistant]:bg-bg-tertiary group-[.assistant]:text-left group-[.user]:bg-accent/10"
+              class="group max-w-[95%] rounded-md border border-border-secondary p-1 text-sm leading-[1.4] wrap-break-word text-main/90 shadow-sm group-[.assistant]:bg-bg-tertiary group-[.assistant]:text-left group-[.user]:bg-accent/10 group-[.user]:whitespace-pre-wrap"
             >
               <template v-for="(segment, idx) in renderSegments(msg)" :key="idx">
-                <span v-if="segment.type === 'text'">{{ segment.text.trim() }}</span>
+                <div
+                  v-if="segment.type === 'text' && msg instanceof AIMessage"
+                  class="markdown-content"
+                  v-html="renderMarkdown(segment.text.trim())"
+                ></div>
+                <span v-else-if="segment.type === 'text'">{{ segment.text.trim() }}</span>
                 <details v-else class="mb-1 rounded-sm border border-border-secondary bg-bg-secondary">
                   <summary class="cursor-pointer list-none p-1 text-sm font-semibold text-secondary">
                     Thought process
@@ -277,6 +282,8 @@ import {
 import { v4 as uuidv4 } from 'uuid'
 import { computed, nextTick, onBeforeMount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 import { useRouter } from 'vue-router'
 
 import { type CheckpointTuple, IndexedDBSaver } from '@/api/checkpoints'
@@ -965,6 +972,10 @@ const renderSegments = (msg: Message): RenderSegment[] => {
   return splitThinkSegments(raw)
 }
 
+marked.use({ gfm: true, breaks: true })
+const renderMarkdown = (text: string): string =>
+  DOMPurify.sanitize(marked.parse(text) as string)
+
 const addWatch = () => {
   watch(
     () => settingForm.value.replyLanguage,
@@ -1063,3 +1074,69 @@ onBeforeMount(() => {
   }
 })
 </script>
+
+<style scoped>
+.markdown-content :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+}
+.markdown-content :deep(th),
+.markdown-content :deep(td) {
+  border: 1px solid #d1d5db;
+  padding: 3px 8px;
+  text-align: left;
+}
+.markdown-content :deep(th) {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+.markdown-content :deep(tr:nth-child(even)) {
+  background: rgba(0, 0, 0, 0.02);
+}
+.markdown-content :deep(h1),
+.markdown-content :deep(h2),
+.markdown-content :deep(h3) {
+  font-weight: 700;
+  margin: 0.4rem 0 0.2rem;
+  line-height: 1.3;
+}
+.markdown-content :deep(h1) { font-size: 1.05rem; }
+.markdown-content :deep(h2) { font-size: 0.95rem; }
+.markdown-content :deep(h3) { font-size: 0.88rem; }
+.markdown-content :deep(p) { margin: 0.2rem 0; }
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) { padding-left: 1.2rem; margin: 0.2rem 0; }
+.markdown-content :deep(li) { margin: 0.1rem 0; }
+.markdown-content :deep(strong) { font-weight: 700; }
+.markdown-content :deep(code) {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.markdown-content :deep(pre) {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.4rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.3rem 0;
+}
+.markdown-content :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+.markdown-content :deep(blockquote) {
+  border-left: 3px solid #9ca3af;
+  padding-left: 0.5rem;
+  color: #6b7280;
+  margin: 0.3rem 0;
+}
+.markdown-content :deep(hr) {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0.5rem 0;
+}
+</style>
