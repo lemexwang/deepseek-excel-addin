@@ -1,3 +1,5 @@
+import { DynamicStructuredTool } from '@langchain/core/tools'
+
 export type ExcelToolName =
   // 读取
   | 'getSelectedRange'
@@ -914,14 +916,20 @@ export const allExcelToolNames: ExcelToolName[] = [
   'autoFit', 'freezePanes',
 ]
 
-export function createExcelTools(enabledTools?: ExcelToolName[]) {
+export function createExcelTools(enabledTools?: ExcelToolName[]): DynamicStructuredTool[] {
   return Object.entries(excelToolDefinitions)
     .filter(([name]) => !enabledTools || enabledTools.includes(name as ExcelToolName))
-    .map(([name, def]) => ({
+    .map(([name, def]) => new DynamicStructuredTool({
       name,
       description: def.description,
       schema: { type: 'object' as const, properties: def.parameters.properties, required: def.parameters.required ?? [] },
-      func: def.execute,
+      func: async (args: Record<string, any>) => {
+        try {
+          return await def.execute(args)
+        } catch (error: any) {
+          return `Error: ${error.message || 'Unknown error occurred'}`
+        }
+      },
     }))
 }
 
